@@ -5484,20 +5484,36 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
       $ftr_3nlen_pv      = (defined $pos_retval) ? $pos_retval - 1 : $ftr_len;
       $ftr_stop_non_n_pv = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_len - $ftr_3nlen_pv), $FH_HR) : -1;
 
-      # if CDS, determine if translated CDS begins with an X
+      # if CDS, determine if translated CDS begins/ends with an X after/before terminal stretch of Ns
       if($ftr_is_cds) { 
         if(! defined $ftr_results_HR->{"n_codon_start"}) { 
           ofile_FAIL("ERROR in $sub_name, sequence $seq_name CDS feature (ftr_idx: $ftr_idx) has no codon_start info", 1, $FH_HR);
         }
         my $cds_codon_start = $ftr_results_HR->{"n_codon_start"};
-        if((($cds_codon_start == 1) && ($ftr_len >= 3)) || 
-           (($cds_codon_start == 2) && ($ftr_len >= 4)) || 
-           (($cds_codon_start == 3) && ($ftr_len >= 5))) { 
-          # cds is long enough to have a full codon
-          my $first_codon = undef;
+        my $notermn_cds_codon_start    = vdr_FrameAdjust($cds_codon_start, $ftr_5nlen, $FH_HR);    # codon start after removing terminal Ns
+
+        my $notermn_cds_codon_start_pv = vdr_FrameAdjust($cds_codon_start, $ftr_5nlen_pv, $FH_HR); # pv codon start after removing terminal Ns
+        my $notermn_cds_len = $ftr_len - $ftr_5nlen;
+        if($notermn_cds_len > 0) { $notermn_cds_len -= $ftr_3nlen; }
+
+        my $notermn_cds_len_pv = $ftr_len - $ftr_5nlen_pv;
+        if($notermn_cds_len_pv > 0) { $notermn_cds_len_pv -= $ftr_3nlen_pv; }
+
+        if((($notermn_cds_codon_start == 1) && ($notermn_cds_len >= 3)) || 
+           (($notermn_cds_codon_start == 2) && ($notermn_cds_len >= 4)) || 
+           (($notermn_cds_codon_start == 3) && ($notermn_cds_len >= 5))) { 
+          # cds with terminal Ns removed is long enough to have at least 1 full codon
+          my $notermn_cds_sqstring = substr($ftr_sqstring_alt, $ftr_5nlen, $notermn_cds_len);
+          if($ftr_3nlen > 0) { 
+            $notermn_cds_sqstring = substr($notermn_cds_sqstring, -1 * $ftr_3nlen);
+          }
+          
+          # determine 
+          my $first_codon  = undef;
           my $final_codon = undef;
-          $first_codon = substr($ftr_sqstring_alt, ($cds_codon_start-1), 3);
-          $final_codon = substr($ftr_sqstring_alt, (-3 - (($ftr_len - ($cds_codon_start-1)) % 3)), 3);
+
+          $first_codon = substr($notermn_cds_sqstring, ($cds_codon_start-1), 3);
+          $final_codon = substr($notermn_cds_sqstring, (-3 - (($notermn_cds_len - ($cds_codon_start-1)) % 3)), 3);
           if(($first_codon =~ m/[^ACGTUacgtu]/) || 
              ($final_codon =~ m/[^ACGTUacgtu]/)) { 
             # first and/or final codon could be an X
@@ -5505,12 +5521,12 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
             my $tmp_cds_fa_file = $out_root . "." . $mdl_name . "." . $ftr_fileroot_AR->[$ftr_idx] . ".cds.fa.tmp";
             my $tmp_orf_fa_file = $out_root . "." . $mdl_name . "." . $ftr_fileroot_AR->[$ftr_idx] . ".orf.fa.tmp";
             open(CDSOUT, ">", $tmp_cds_fa_file) || ofile_FileOpenFailure($tmp_cds_fa_file, $sub_name, $!, "writing", $FH_HR);
-            print CDSOUT (">" . $ftr_seq_name . "\n" . $ftr_sqstring_alt); 
+            print CDSOUT (">" . $ftr_seq_name . "/" . ($ftr_5nlen+1) . "-" . ($notermn_cds_len + $ftr_5nlen) . "\n" . $ftr_sqstring_alt); 
             close(CDSOUT);
             my $exp_nt_len = $ftr_len - ($cds_codon_start - 1); # first ($cds_codon_start - 1) nucleotides are not translated
             $exp_nt_len -= ($exp_nt_len % 3); # final nts after final codon are not translated
             
-            my $aa_sqstring = esl_translate_cds_to_protein_with_stops($execs_HR->{"esl-translate"}, $tmp_cds_fa_file, $tmp_orf_fa_file, $cds_codon_start, $mdl_tt, ($exp_nt_len/3), $opt_HHR, $ofile_info_HHR);
+            my $aa_sqstring = esl_translate_cds_to_protein_with_stops($execs_HR->{"esl-translate"}, $tmp_cds_fa_file, $tmp_orf_fa_file, $cds_codon_start, $mdl_tt, $ftr_sqstring_alt, $opt_HHR, $ofile_info_HHR);
 
             my $pos_retval = undef;
             $aa_sqstring =~ m/[^X]/g; 
@@ -12890,7 +12906,7 @@ sub helper_tabular_fill_header_and_justification_arrays {
 #  $orf_fa_file:    path to fasta file to create with esl-translate with ORFs
 #  $frame:          frame we want to translate in
 #  $tt:             translation table to translate in
-#  $exp_aa_len:     expected length of fully translated protein including final stop (and internal stops)
+#  $cds_sqstring:   sqstring with full CDS
 #  $opt_HHR:        ref to 2D hash of option values, see top of sqp_opts.pm for description
 #  $ofile_info_HHR: ref to 2D hash of output file information, added to here
 #             
@@ -12902,11 +12918,11 @@ sub esl_translate_cds_to_protein_with_stops {
   my $nargs_exp = 8;
   if(scalar(@_) != $nargs_exp) { die "ERROR $sub_name entered with wrong number of input args"; }
 
-  my ($esl_translate, $cds_fa_file, $orf_fa_file, $frame, $tt, $exp_aa_len, $opt_HHR, $ofile_info_HHR) = (@_);
+  my ($esl_translate, $cds_fa_file, $orf_fa_file, $frame, $tt, $cds_sqstring, $opt_HHR, $ofile_info_HHR) = (@_);
 
   my $FH_HR = $ofile_info_HH{"FH"};
 
-  printf("\nin $sub_name, frame: $frame, exp_aa_len: $exp_aa_len\n");
+  printf("\nin $sub_name, frame: $frame\n");
 
   my $translate_cmd = $esl_translate . " -c $tt -l 3 --watson $cds_fa_file > $orf_fa_file";
   utl_RunCommand($translate_cmd, opt_Get("-v", $opt_HHR), 0, $FH_HR);
@@ -12914,10 +12930,17 @@ sub esl_translate_cds_to_protein_with_stops {
 
   my $aa_sqstring = "";
   my $aa_len = 0;
-  my $nt_len = 0;
-  my $nt_pos = 0;
+  my $nt_len = ($frame-1);
+  my $nt_pos = ($frame-1);
   my $inframe_flag = 0; # set to 1 when we see an ORF in frame $frame
-  my $exp_nt_len = $exp_aa_len * 3;
+  my $cds_len = length($cds_sqstring);
+  my $n_untrans5 = $frame - 1; # first ($frame - 1) nucleotides are not translated
+  my $exp_nt_len = $cds_len - $n_untrans5; # expected nt length of translated CDS does not include 5' untranslated nt
+  my $n_untrans3 = ($exp_nt_len % 3); # final nts after final codon are not translated
+  $exp_nt_len -= $n_untrans3; # expected nt length of translated CDS does not include 3' untranslated nt
+  my $exp_aa_len = $exp_nt_len / 3;
+  $exp_nt_len += ($frame-1); # add in any nt before first codon
+
   # when parsing the esl-translate output, we create a full ORF sequence including stop codons of the full CDS
   # we concatenate together (potentially multiple) sequence(s) in frame $frame
   while(my $cds_line = <CDSIN>) { 
@@ -12965,8 +12988,55 @@ sub esl_translate_cds_to_protein_with_stops {
   if($aa_len != $exp_aa_len) { 
     ofile_FAIL("ERROR in $sub_name, problem parsing esl-translate output file $orf_fa_file, aa length is $aa_len but expected $exp_aa_len\n", 1, $FH_HR);
   }
-  printf("AA seq:\n$aa_sqstring\n");
-  exit 0;
+  printf("AA seq0:\n$aa_sqstring\n");
+
+  # Deal with 'quirk' of esl-translate: it won't create X amino acids at the 5' end of the ORFs
+  # except in special situations (at least the following: first codon is ANN, NTN or ATN leads to >= 1 X at N terminus).
+  # The code above will add '*' for any missing AAs at the N terminus, but in some cases these should actually be 
+  # 'X's. For example: 
+  # NNNNNNAAA translates as 'K' instead of 'XXK', but 
+  # ANNNNNAAA translates as 'XXK'.
+  # NNNTAAAAA also translates as 'K' (note that the second codon is a stop codon)
+  # 
+  # The code above will fill in any missing codons at the 5' end as '*' characters, however we can't
+  # just replace these with 'X's because they could be actual stop codons, so we have to search the first
+  # N*3 nucleotides for any stop codons, where N is the number of leading '*' characters at the beginning
+  # of $aa_sqstring
+  $aa_sqstring =~ m/[^\*]/g; 
+  my $pos_retval = pos($aa_sqstring); # returns position of first non-*
+  # if $pos_retval is undef entire aa_sqstring is *
+  my $num_stars = undef;
+  if(! defined $pos_retval) { 
+    $num_stars = length($aa_sqstring);
+  }
+  else { 
+    $num_stars = $pos_retval - 1;
+  }
+  my $cds_subsqstring = substr($cds_sqstring, ($frame - 1), ($num_stars * 3));
+  my @cds_nxt_stp_A = ();
+  sqstring_find_stops($cds_subsqstring, $tt, \@cds_nxt_stp_A, $FH_HR);
+  my $num_stars_to_convert_to_x = 0;
+  # $cds_nxt_stp_A[1] = $x; closest stop codon at or 3' of position $i
+  #                         in frame 1 on positive strand *ends* at position $x; 
+  #                         '0' if there are none.
+  if($cds_nxt_stp_A[1] == 0) { # no stops
+    $num_stars_to_convert_to_x = $num_stars;
+  }
+  else { 
+    $num_stars_to_convert_to_x = ($cds_nxt_stp_A[1] / 3) - 1; 
+    # cds_nxt_stp_A[1] == 3 -> first  codon is a stop, remove 0 stars
+    # cds_nxt_stp_A[1] == 6 -> second codon is a stop, remove 1 stars, etc.
+  }
+  if($num_stars_to_convert_to_x > 0) { 
+    # shorten aa_sqstring then add back Xs
+    $aa_sqstring = substr($aa_sqstring, $num_stars_to_convert_to_x);
+    $aa_sqstring = utl_StringMonoChar($num_stars_to_convert_to_x, "X", $FH_HR) . $aa_sqstring;
+  }
+  # note: any stars at the 5' end before the first actual stop that is a star 
+  # will still exist in $aa_sqstring, but that's ok because we will only use 
+  # it to count terminal Xs at the N and C termini
+
+  printf("AA seq1:\n$aa_sqstring\n");
 
   return $aa_sqstring;
 }
