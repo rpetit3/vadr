@@ -5311,14 +5311,14 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
     my $ftr_stop_non_n_pv  = undef; # sequence position of final non-N on 3' end in protein validation sqstring, commonly $ftr_stop, -1 if complete feature is Ns
 
     # variables related to consecutive stretches of nucleotides that translate to X at beginning/end of CDS features
-    my $ftr_cds_5xlen    = 0; # number of consecutive nt starting at ftr_start (on 5' end) before first non-X in translated CDS (commonly 0, always 0 for non-CDS)
-    my $ftr_cds_3xlen    = 0; # number of consecutive nt ending   at ftr_stop  (on 3' end) after  final non-X in translated CDS (commonly 0, always 0 for non-CDS)
-    my $ftr_cds_5xlen_pv = 0; # number of consecutive nt starting at ftr_start (on 5' end) before first non-X in translated CDS (commonly 0, always 0 for non-CDS) in protein validation sqstring
-    my $ftr_cds_3xlen_pv = 0; # number of consecutive nt ending   at ftr_stop  (on 3' end) after  final non-X in translated CDS (commonly 0, always 0 for non-CDS) in protein validation sqstring
-    my $ftr_cds_start_non_x    = undef; # sequence position of first non-N for which next AA (translated in frame n_codon_start) is non-X on 5' end, commonly $ftr_start, -1 if complete CDS feature is Ns (always undef if non-CDS)
-    my $ftr_cds_stop_non_x     = undef; # sequence position of final non-N for which prev AA (translated in frame n_codon_start) is non-X on 3' end, commonly $ftr_stop,  -1 if complete CDS feature is Ns (always undef if non-CDS)
-    my $ftr_cds_start_non_x_pv = undef; # sequence position of first non-N for which next AA (translated in frame n_codon_start) is non-X on 5' end, in protein validation sqstring, commonly $ftr_start, -1 if complete CDS feature is Ns (always undef if non-CDS)
-    my $ftr_cds_stop_non_x_pv  = undef; # sequence position of final non-N for which prev AA (translated in frame n_codon_start) is non-X on 3' end, in protein validation sqstring, commonly $ftr_stop,  -1 if complete CDS feature is Ns (always undef if non-CDS)
+    my $ftr_5xlen    = 0; # number of consecutive nt starting at ftr_start (on 5' end) before first non-X in translated CDS (commonly 0, always 0 for non-CDS)
+    my $ftr_3xlen    = 0; # number of consecutive nt ending   at ftr_stop  (on 3' end) after  final non-X in translated CDS (commonly 0, always 0 for non-CDS)
+    my $ftr_5xlen_pv = 0; # number of consecutive nt starting at ftr_start (on 5' end) before first non-X in translated CDS (commonly 0, always 0 for non-CDS) in protein validation sqstring
+    my $ftr_3xlen_pv = 0; # number of consecutive nt ending   at ftr_stop  (on 3' end) after  final non-X in translated CDS (commonly 0, always 0 for non-CDS) in protein validation sqstring
+    my $ftr_start_non_x    = undef; # sequence position of first non-N for which next AA (translated in frame n_codon_start) is non-X on 5' end, commonly $ftr_start, -1 if complete CDS feature is Ns (always undef if non-CDS)
+    my $ftr_stop_non_x     = undef; # sequence position of final non-N for which prev AA (translated in frame n_codon_start) is non-X on 3' end, commonly $ftr_stop,  -1 if complete CDS feature is Ns (always undef if non-CDS)
+    my $ftr_start_non_x_pv = undef; # sequence position of first non-N for which next AA (translated in frame n_codon_start) is non-X on 5' end, in protein validation sqstring, commonly $ftr_start, -1 if complete CDS feature is Ns (always undef if non-CDS)
+    my $ftr_stop_non_x_pv  = undef; # sequence position of final non-N for which prev AA (translated in frame n_codon_start) is non-X on 3' end, in protein validation sqstring, commonly $ftr_stop,  -1 if complete CDS feature is Ns (always undef if non-CDS)
 
     my $ftr_scoords = undef; # coords string with sequence coordinates of all segments of the feature
     my $ftr_mcoords = undef; # coords string with model    coordinates of all segments of the feature
@@ -5496,73 +5496,44 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
           # cds is long enough to have a full codon
           my $first_codon = undef;
           my $final_codon = undef;
-          $first_codon = substr($ftr_sqstring_pv, ($cds_codon_start-1), 3);
-          $final_codon = substr($ftr_sqstring_pv, (-3 - (($ftr_len - ($cds_codon_start-1)) % 3)), 3);
+          $first_codon = substr($ftr_sqstring_alt, ($cds_codon_start-1), 3);
+          $final_codon = substr($ftr_sqstring_alt, (-3 - (($ftr_len - ($cds_codon_start-1)) % 3)), 3);
           if(($first_codon =~ m/[^ACGTUacgtu]/) || 
              ($final_codon =~ m/[^ACGTUacgtu]/)) { 
             # first and/or final codon could be an X
-            # use esl-translate to translate the sequence 
-            my $tmp_cds_fa_file = $out_root . "." . $mdl_name . "." . $ftr_fileroot_AR->[$ftr_idx] . ".fa.tmp";
-            my $tmp_cds_translate_fa_file = $out_root . "." . $mdl_name . "." . $ftr_fileroot_AR->[$ftr_idx] . ".translate.fa.tmp";
+            # create a single fasta file with t
+            my $tmp_cds_fa_file = $out_root . "." . $mdl_name . "." . $ftr_fileroot_AR->[$ftr_idx] . ".cds.fa.tmp";
+            my $tmp_orf_fa_file = $out_root . "." . $mdl_name . "." . $ftr_fileroot_AR->[$ftr_idx] . ".orf.fa.tmp";
             open(CDSOUT, ">", $tmp_cds_fa_file) || ofile_FileOpenFailure($tmp_cds_fa_file, $sub_name, $!, "writing", $FH_HR);
-            print CDSOUT (">" . $ftr_seq_name . "\n" . $ftr_sqstring_pv); 
+            print CDSOUT (">" . $ftr_seq_name . "\n" . $ftr_sqstring_alt); 
             close(CDSOUT);
-            my $translate_cmd = $execs_HR->{"esl-translate"} . " -c $mdl_tt -l 3 --watson $tmp_cds_fa_file > $tmp_cds_translate_fa_file";
-            utl_RunCommand($translate_cmd, opt_Get("-v", $opt_HHR), 0, $FH_HR);
-            open(CDSIN, $tmp_cds_translate_fa_file) || ofile_FileOpenFailure($tmp_cds_translate_fa_file, $sub_name, $!, "reading", $FH_HR);
-            my $aa_sqstring = "";
-            my $aa_len = 0;
-            my $nt_len = $cds_codon_start - 1;
-            my $nt_pos = 0;
-            my $inframe_flag = 0; # set to 1 when we see an ORF in frame $cds_codon_start
             my $exp_nt_len = $ftr_len - ($cds_codon_start - 1); # first ($cds_codon_start - 1) nucleotides are not translated
             $exp_nt_len -= ($exp_nt_len % 3); # final nts after final codon are not translated
-            # when parsing the esl-translate output, we create a full ORF sequence including stop codons of the full CDS
-            # we concatenate together (potentially multiple) sequence(s) in frame $cds_codon_start
-            while(my $cds_line = <CDSIN>) { 
-              chomp $cds_line;
-              if($cds_line =~ m/^\>/) { 
-                #>orf58 source=NC_039477.1/5..5104:+ coords=1..5097 length=1699 frame=1  
-                if($cds_line =~ /^\>orf\d+\s+source\=\S+\s+coords\=(\d+)\.\.(\d+)\s+length\=\d+\s+frame\=(\S+)/) { 
-                  my ($cds_start, $cds_stop, $cds_frame) = ($1, $2, $3);
-                  if($cds_frame == $cds_codon_start) { 
-                    # add any stop codons since last sequence
-                    for($nt_pos = $nt_len; $nt_pos < ($cds_start-1); $nt_pos += 3) { 
-                      $aa_sqstring .= "*"; # add stop codon that is not present in any orfs
-                      $aa_len++;
-                      $nt_len+=3;
-                    }
-                    $inframe_flag = 1; # frame we want, store this seq
-                  }
-                  else { 
-                    $inframe_flag = 0; # not frame we want, don't store this seq
-                  }
-                }
-                else { # header (>) line didn't match expected format, exit
-                  ofile_FAIL("ERROR in $sub_name, problem parsing esl-translate output file $tmp_cds_translate_fa_file, line:\n$cds_line\n", 1, $FH_HR);
-                }
-              }
-              elsif($cds_line =~ m/\w/) { 
-                # sequence line
-                if($inframe_flag) { 
-                  $aa_sqstring .= $cds_line; 
-                  $aa_len += length($cds_line);
-                  $nt_len += 3 * length($cds_line);
-                }
-              }
-            }
-            close(CDSIN);
-            if($nt_len == ($exp_nt_len - 3)) { 
-              # final codon must translate into valid stop codon, add it
-              $aa_sqstring .= "*"; # add stop codon that is not present in any orfs
-              $aa_len++;
-              $nt_len+=3;
-            }
-            if($nt_len != $exp_nt_len) { 
-              ofile_FAIL("ERROR in $sub_name, problem parsing esl-translate output file $tmp_cds_translate_fa_file, nt length is $nt_len but expected $exp_nt_len\n", 1, $FH_HR);
-            }
-            printf("AA seq:\n$aa_sqstring\n");
-            exit 0;
+            
+            my $aa_sqstring = esl_translate_cds_to_protein_with_stops($execs_HR->{"esl-translate"}, $tmp_cds_fa_file, $tmp_orf_fa_file, $cds_codon_start, $mdl_tt, ($exp_nt_len/3), $opt_HHR, $ofile_info_HHR);
+
+            my $pos_retval = undef;
+            $aa_sqstring =~ m/[^X]/g; 
+            $pos_retval = pos($aa_sqstring); # returns position of first non-X
+            # if $pos_retval is undef entire aa_sqstring is X
+            $ftr_5xlen  = (defined $pos_retval) ? (3 * ($pos_retval - 1)) : $exp_nt_len;
+            $ftr_5xlen += ($cds_codon_start - 1); # add in any nt before first codon
+            $ftr_start_non_x = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_5xlen + 1), $FH_HR) : -1;
+            
+            my $rev_aa_sqstring = reverse($aa_sqstring);
+            $rev_aa_sqstring =~ m/[^X]/g; 
+            $pos_retval = pos($rev_aa_sqstring); # returns position of first non-X in reversed string
+            # if $pos_retval is undef entire sqstring is X
+            $ftr_3xlen  = (defined $pos_retval) ? (3 * ($pos_retval - 1)) : $exp_nt_len;
+            $ftr_3xlen += (($ftr_len - ($cds_codon_start - 1)) % 3); # add in any nt after final codon
+            $ftr_stop_non_x = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_len - $ftr_3xlen), $FH_HR) : -1;
+
+            printf("ftr_5xlen:       $ftr_5xlen\n");
+            printf("ftr_start_non_x: $ftr_start_non_x\n");
+            printf("ftr_3xlen:       $ftr_3xlen\n");
+            printf("ftr_stop_non_x:  $ftr_stop_non_x\n");
+
+            # repeat for $ftr_sqstring_pv!! not sure how to do this most efficiently
           }
         }
       }
@@ -5588,8 +5559,8 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
       # deal with mutstart for all CDS that are not 5' truncated
       if(! $ftr_is_5trunc) {
         # feature is not 5' truncated, look for a start codon if it's a CDS
-        # and no ambgnt5c alert already reported
-        if(($ftr_is_cds) && (! defined $alt_str_H{"ambgnt5c"})) { 
+        # and no ambgnt5c alert already reported and 
+        if(($ftr_is_cds) && (! defined $alt_str_H{"ambgnt5c"}) && ($ftr_5xlen == 0)) { 
           if(($ftr_len >= 3) && (! sqstring_check_start($ftr_sqstring_alt, $mdl_tt, $atg_only, $FH_HR))) { 
             $alt_scoords  = "seq:" . vdr_CoordsSegmentCreate($ftr2org_pos_A[1], $ftr2org_pos_A[3], $ftr_strand, $FH_HR) . ";";
             $alt_mcoords  = "mdl:" . vdr_CoordsSegmentCreate(abs($ua2rf_AR->[($ftr2org_pos_A[1])]), abs($ua2rf_AR->[($ftr2org_pos_A[3])]), $ftr_strand, $FH_HR) . ";";
@@ -12904,4 +12875,95 @@ sub helper_tabular_fill_header_and_justification_arrays {
     ofile_FAIL("ERROR in $sub_name, unrecognized ofile_key $ofile_key", 1, $FH_HR);
   }
   return;
+}
+
+
+#################################################################
+# Subroutine: esl_translate_cds_to_protein_with_stops()
+# Incept:     EPN, Tue Jul 27 20:43:59 2021
+# Purpose:    Translate a single CDS sequence into a protein
+#             sequence *with* stops using esl-translate.
+#
+# Arguments:
+#  $esl_translate:  path to esl-translate executable
+#  $cds_fa_file:    path to existing fasta file with CDS sequence
+#  $orf_fa_file:    path to fasta file to create with esl-translate with ORFs
+#  $frame:          frame we want to translate in
+#  $tt:             translation table to translate in
+#  $exp_aa_len:     expected length of fully translated protein including final stop (and internal stops)
+#  $opt_HHR:        ref to 2D hash of option values, see top of sqp_opts.pm for description
+#  $ofile_info_HHR: ref to 2D hash of output file information, added to here
+#             
+# Returns:  the translated protein sequence as a string (sqstring)
+#
+#################################################################
+sub esl_translate_cds_to_protein_with_stops { 
+  my $sub_name = "esl_translate_cds_to_protein_with_stops";
+  my $nargs_exp = 8;
+  if(scalar(@_) != $nargs_exp) { die "ERROR $sub_name entered with wrong number of input args"; }
+
+  my ($esl_translate, $cds_fa_file, $orf_fa_file, $frame, $tt, $exp_aa_len, $opt_HHR, $ofile_info_HHR) = (@_);
+
+  my $FH_HR = $ofile_info_HH{"FH"};
+
+  my $translate_cmd = $esl_translate . " -c $tt -l 3 --watson $cds_fa_file > $orf_fa_file";
+  utl_RunCommand($translate_cmd, opt_Get("-v", $opt_HHR), 0, $FH_HR);
+  open(CDSIN, $orf_fa_file) || ofile_FileOpenFailure($orf_fa_file, $sub_name, $!, "reading", $FH_HR);
+
+  my $aa_sqstring = "";
+  my $aa_len = 0;
+  my $nt_len = $frame - 1;
+  my $nt_pos = 0;
+  my $inframe_flag = 0; # set to 1 when we see an ORF in frame $frame
+  my $exp_nt_len = $exp_aa_len * 3;
+  # when parsing the esl-translate output, we create a full ORF sequence including stop codons of the full CDS
+  # we concatenate together (potentially multiple) sequence(s) in frame $frame
+  while(my $cds_line = <CDSIN>) { 
+    chomp $cds_line;
+    if($cds_line =~ m/^\>/) { 
+      #>orf58 source=NC_039477.1/5..5104:+ coords=1..5097 length=1699 frame=1  
+      if($cds_line =~ /^\>orf\d+\s+source\=\S+\s+coords\=(\d+)\.\.(\d+)\s+length\=\d+\s+frame\=(\S+)/) { 
+        my ($cds_start, $cds_stop, $cds_frame) = ($1, $2, $3);
+        if($cds_frame == $frame) { 
+          # add any stop codons since last sequence
+          for($nt_pos = $nt_len; $nt_pos < ($cds_start-1); $nt_pos += 3) { 
+            $aa_sqstring .= "*"; # add stop codon that is not present in any orfs
+            $aa_len++;
+            $nt_len+=3;
+          }
+          $inframe_flag = 1; # frame we want, store this seq
+        }
+        else { 
+          $inframe_flag = 0; # not frame we want, don't store this seq
+        }
+      }
+      else { # header (>) line didn't match expected format, exit
+        ofile_FAIL("ERROR in $sub_name, problem parsing esl-translate output file $orf_fa_file, line:\n$cds_line\n", 1, $FH_HR);
+      }
+    }
+    elsif($cds_line =~ m/\w/) { 
+      # sequence line
+      if($inframe_flag) { 
+        $aa_sqstring .= $cds_line; 
+        $aa_len += length($cds_line);
+        $nt_len += 3 * length($cds_line);
+      }
+    }
+  }
+  close(CDSIN);
+  if($nt_len == ($exp_nt_len - 3)) { 
+    # final codon must translate into valid stop codon, add it
+    $aa_sqstring .= "*"; # add stop codon that is not present in any orfs
+    $aa_len++;
+    $nt_len+=3;
+  }
+  if($nt_len != $exp_nt_len) { 
+    ofile_FAIL("ERROR in $sub_name, problem parsing esl-translate output file $orf_fa_file, nt length is $nt_len but expected $exp_nt_len\n", 1, $FH_HR);
+  }
+  if($aa_len != $exp_aa_len) { 
+    ofile_FAIL("ERROR in $sub_name, problem parsing esl-translate output file $orf_fa_file, aa length is $aa_len but expected $exp_aa_len\n", 1, $FH_HR);
+  }
+  printf("AA seq:\n$aa_sqstring\n");
+
+  return $aa_sqstring;
 }
