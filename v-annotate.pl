@@ -5504,16 +5504,18 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
            (($notermn_cds_codon_start == 3) && ($notermn_cds_len >= 5))) { 
           # cds with terminal Ns removed is long enough to have at least 1 full codon
           my $notermn_cds_sqstring = substr($ftr_sqstring_alt, $ftr_5nlen, $notermn_cds_len);
-          if($ftr_3nlen > 0) { 
-            $notermn_cds_sqstring = substr($notermn_cds_sqstring, -1 * $ftr_3nlen);
-          }
           
           # determine 
           my $first_codon  = undef;
           my $final_codon = undef;
 
-          $first_codon = substr($notermn_cds_sqstring, ($cds_codon_start-1), 3);
-          $final_codon = substr($notermn_cds_sqstring, (-3 - (($notermn_cds_len - ($cds_codon_start-1)) % 3)), 3);
+          printf("notermn_cds_sqstring:     $notermn_cds_sqstring\n");
+          printf("notermn_cds_len:          $notermn_cds_len\n");
+          printf("notermn_cds_codon_start:  $notermn_cds_codon_start\n");
+          printf("final_codon: substr(notermn_cds_sqstring, %d, 3)\n", (-3 - (($notermn_cds_len - ($notermn_cds_codon_start-1)) % 3)));
+
+          $first_codon = substr($notermn_cds_sqstring, ($notermn_cds_codon_start-1), 3);
+          $final_codon = substr($notermn_cds_sqstring, (-3 - (($notermn_cds_len - ($notermn_cds_codon_start-1)) % 3)), 3);
           if(($first_codon =~ m/[^ACGTUacgtu]/) || 
              ($final_codon =~ m/[^ACGTUacgtu]/)) { 
             # first and/or final codon could be an X
@@ -5526,6 +5528,7 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
             my $exp_nt_len = $ftr_len - ($cds_codon_start - 1); # first ($cds_codon_start - 1) nucleotides are not translated
             $exp_nt_len -= ($exp_nt_len % 3); # final nts after final codon are not translated
             
+            printf("HEYA calling esl_translate_cds_to_protein_with_stops for seq: $seq_name\n");
             my $aa_sqstring = esl_translate_cds_to_protein_with_stops($execs_HR->{"esl-translate"}, $tmp_cds_fa_file, $tmp_orf_fa_file, $cds_codon_start, $mdl_tt, $ftr_sqstring_alt, $opt_HHR, $ofile_info_HHR);
 
             my $pos_retval = undef;
@@ -5534,6 +5537,7 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
             # if $pos_retval is undef entire aa_sqstring is X
             $ftr_5xlen  = (defined $pos_retval) ? (3 * ($pos_retval - 1)) : $exp_nt_len;
             $ftr_5xlen += ($cds_codon_start - 1); # add in any nt before first codon
+            $ftr_5xlen += $ftr_5nlen; # add in 5' terminal Ns
             $ftr_start_non_x = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_5xlen + 1), $FH_HR) : -1;
             
             my $rev_aa_sqstring = reverse($aa_sqstring);
@@ -5542,6 +5546,7 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
             # if $pos_retval is undef entire sqstring is X
             $ftr_3xlen  = (defined $pos_retval) ? (3 * ($pos_retval - 1)) : $exp_nt_len;
             $ftr_3xlen += (($ftr_len - ($cds_codon_start - 1)) % 3); # add in any nt after final codon
+            $ftr_3xlen += $ftr_3nlen; # add in 3' terminal Ns
             $ftr_stop_non_x = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_len - $ftr_3xlen), $FH_HR) : -1;
 
             printf("ftr_5xlen:       $ftr_5xlen\n");
@@ -5576,7 +5581,8 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
       if(! $ftr_is_5trunc) {
         # feature is not 5' truncated, look for a start codon if it's a CDS
         # and no ambgnt5c alert already reported and 
-        if(($ftr_is_cds) && (! defined $alt_str_H{"ambgnt5c"}) && ($ftr_5xlen == 0)) { 
+#        if(($ftr_is_cds) && (! defined $alt_str_H{"ambgnt5c"}) && ($ftr_5xlen == 0)) { 
+        if(($ftr_is_cds) && (! defined $alt_str_H{"ambgnt5c"})) { 
           if(($ftr_len >= 3) && (! sqstring_check_start($ftr_sqstring_alt, $mdl_tt, $atg_only, $FH_HR))) { 
             $alt_scoords  = "seq:" . vdr_CoordsSegmentCreate($ftr2org_pos_A[1], $ftr2org_pos_A[3], $ftr_strand, $FH_HR) . ";";
             $alt_mcoords  = "mdl:" . vdr_CoordsSegmentCreate(abs($ua2rf_AR->[($ftr2org_pos_A[1])]), abs($ua2rf_AR->[($ftr2org_pos_A[3])]), $ftr_strand, $FH_HR) . ";";
@@ -13012,30 +13018,32 @@ sub esl_translate_cds_to_protein_with_stops {
   else { 
     $num_stars = $pos_retval - 1;
   }
-  my $cds_subsqstring = substr($cds_sqstring, ($frame - 1), ($num_stars * 3));
-  my @cds_nxt_stp_A = ();
-  sqstring_find_stops($cds_subsqstring, $tt, \@cds_nxt_stp_A, $FH_HR);
-  my $num_stars_to_convert_to_x = 0;
-  # $cds_nxt_stp_A[1] = $x; closest stop codon at or 3' of position $i
-  #                         in frame 1 on positive strand *ends* at position $x; 
-  #                         '0' if there are none.
-  if($cds_nxt_stp_A[1] == 0) { # no stops
-    $num_stars_to_convert_to_x = $num_stars;
+  printf("num_stars: $num_stars\n");
+  if($num_stars > 0) { 
+    my $cds_subsqstring = substr($cds_sqstring, ($frame - 1), ($num_stars * 3));
+    my @cds_nxt_stp_A = ();
+    sqstring_find_stops($cds_subsqstring, $tt, \@cds_nxt_stp_A, $FH_HR);
+    my $num_stars_to_convert_to_x = 0;
+    # $cds_nxt_stp_A[1] = $x; closest stop codon at or 3' of position $i
+    #                         in frame 1 on positive strand *ends* at position $x; 
+    #                         '0' if there are none.
+    if($cds_nxt_stp_A[1] == 0) { # no stops
+      $num_stars_to_convert_to_x = $num_stars;
+    }
+    else { 
+      $num_stars_to_convert_to_x = ($cds_nxt_stp_A[1] / 3) - 1; 
+      # cds_nxt_stp_A[1] == 3 -> first  codon is a stop, remove 0 stars
+      # cds_nxt_stp_A[1] == 6 -> second codon is a stop, remove 1 stars, etc.
+    }
+    if($num_stars_to_convert_to_x > 0) { 
+      # shorten aa_sqstring then add back Xs
+      $aa_sqstring = substr($aa_sqstring, $num_stars_to_convert_to_x);
+      $aa_sqstring = utl_StringMonoChar($num_stars_to_convert_to_x, "X", $FH_HR) . $aa_sqstring;
+    }
+    # note: any stars at the 5' end before the first actual stop that is a star 
+    # will still exist in $aa_sqstring, but that's ok because we will only use 
+    # it to count terminal Xs at the N and C termini
   }
-  else { 
-    $num_stars_to_convert_to_x = ($cds_nxt_stp_A[1] / 3) - 1; 
-    # cds_nxt_stp_A[1] == 3 -> first  codon is a stop, remove 0 stars
-    # cds_nxt_stp_A[1] == 6 -> second codon is a stop, remove 1 stars, etc.
-  }
-  if($num_stars_to_convert_to_x > 0) { 
-    # shorten aa_sqstring then add back Xs
-    $aa_sqstring = substr($aa_sqstring, $num_stars_to_convert_to_x);
-    $aa_sqstring = utl_StringMonoChar($num_stars_to_convert_to_x, "X", $FH_HR) . $aa_sqstring;
-  }
-  # note: any stars at the 5' end before the first actual stop that is a star 
-  # will still exist in $aa_sqstring, but that's ok because we will only use 
-  # it to count terminal Xs at the N and C termini
-
   printf("AA seq1:\n$aa_sqstring\n");
 
   return $aa_sqstring;
