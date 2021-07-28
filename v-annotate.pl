@@ -12906,6 +12906,8 @@ sub esl_translate_cds_to_protein_with_stops {
 
   my $FH_HR = $ofile_info_HH{"FH"};
 
+  printf("\nin $sub_name, frame: $frame, exp_aa_len: $exp_aa_len\n");
+
   my $translate_cmd = $esl_translate . " -c $tt -l 3 --watson $cds_fa_file > $orf_fa_file";
   utl_RunCommand($translate_cmd, opt_Get("-v", $opt_HHR), 0, $FH_HR);
   open(CDSIN, $orf_fa_file) || ofile_FileOpenFailure($orf_fa_file, $sub_name, $!, "reading", $FH_HR);
@@ -12964,6 +12966,7 @@ sub esl_translate_cds_to_protein_with_stops {
     ofile_FAIL("ERROR in $sub_name, problem parsing esl-translate output file $orf_fa_file, aa length is $aa_len but expected $exp_aa_len\n", 1, $FH_HR);
   }
   printf("AA seq:\n$aa_sqstring\n");
+  exit 0;
 
   return $aa_sqstring;
 }
