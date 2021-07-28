@@ -4889,7 +4889,7 @@ sub vdr_ParseSeqFileToSeqHash {
 #
 #################################################################
 sub vdr_FrameAdjust { 
-  my $sub_name = "frame_adjust";
+  my $sub_name = "vdr_FrameAdjust";
   my $nargs_exp = 3;
   if(scalar(@_) != $nargs_exp) { die "ERROR $sub_name entered with wrong number of input args"; }
 
