@@ -12914,7 +12914,7 @@ sub esl_translate_cds_to_protein_with_stops {
 
   my $aa_sqstring = "";
   my $aa_len = 0;
-  my $nt_len = $frame - 1;
+  my $nt_len = 0;
   my $nt_pos = 0;
   my $inframe_flag = 0; # set to 1 when we see an ORF in frame $frame
   my $exp_nt_len = $exp_aa_len * 3;
