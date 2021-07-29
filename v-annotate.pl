@@ -5441,48 +5441,31 @@ sub fetch_features_and_add_cds_and_mp_alerts_for_one_sequence {
       # determine the position of the first and final N or n in ftr_sqstring_alt and ftr_sqstring_pv
       # we use ftr_sqstring_alt values for alerts
       # we use ftr_sqstring_pv  values later during protein validation to adjust protein/nucleotide difference tolerance at ends
-      my $pos_retval = undef;
-      $ftr_sqstring_alt =~ m/[^Nn]/g; 
-      $pos_retval = pos($ftr_sqstring_alt); # returns position of first non-N/n
-      # if $pos_retval is undef entire sqstring is N or n
-      $ftr_5nlen       = (defined $pos_retval) ? $pos_retval - 1 : $ftr_len;
-      $ftr_start_non_n = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_5nlen + 1), $FH_HR) : -1;
+      $ftr_5nlen    = count_terminal_Ns_or_Xs_in_sqstring($ftr_sqstring_alt, 0);
+      $ftr_5nlen_pv = count_terminal_Ns_or_Xs_in_sqstring($ftr_sqstring_pv,  0);
+      $ftr_3nlen    = count_terminal_Ns_or_Xs_in_sqstring((scalar reverse($ftr_sqstring_alt)), 0);
+      $ftr_3nlen_pv = count_terminal_Ns_or_Xs_in_sqstring((scalar reverse($ftr_sqstring_pv)),  0);
+
+      $ftr_start_non_n    = ($ftr_5nlen    < $ftr_len) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_5nlen + 1), $FH_HR) : -1;
+      $ftr_start_non_n_pv = ($ftr_5nlen_pv < $ftr_len) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_5nlen_pv + 1), $FH_HR) : -1;
+      $ftr_stop_non_n     = ($ftr_3nlen    < $ftr_len) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_len - $ftr_3nlen), $FH_HR) : -1;
+      $ftr_stop_non_n_pv  = ($ftr_3nlen_pv < $ftr_len) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_len - $ftr_3nlen), $FH_HR) : -1;
+
       if($ftr_5nlen != 0) { 
         my $ambg_alt = ($ftr_is_cds) ? "ambgnt5c" : "ambgnt5f";
-        my $ftr_final_n = vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ((defined $pos_retval) ? $ftr_5nlen : $ftr_len), $FH_HR);
+        my $ftr_final_n = vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, (($ftr_5nlen != -1) ? $ftr_5nlen : $ftr_len), $FH_HR);
         $alt_scoords  = "seq:" . vdr_CoordsSegmentCreate($ftr_start, $ftr_final_n, $ftr_strand, $FH_HR) . ";";
         $alt_mcoords  = "mdl:" . vdr_CoordsSegmentCreate(abs($ua2rf_AR->[$ftr_start]), abs($ua2rf_AR->[$ftr_final_n]), $ftr_strand, $FH_HR) . ";";
         $alt_str_H{$ambg_alt} = sprintf("%s%sVADRNULL", $alt_scoords, $alt_mcoords);
       }
 
-      # same drill for ftr_sqstring_pv
-      $ftr_sqstring_pv =~ m/[^Nn]/g; 
-      $pos_retval = pos($ftr_sqstring_pv); # returns position of first non-N/n
-      # if $pos_retval is undef entire sqstring is N or n
-      $ftr_5nlen_pv       = (defined $pos_retval) ? $pos_retval - 1 : $ftr_len;
-      $ftr_start_non_n_pv = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_5nlen_pv + 1), $FH_HR) : -1;
-
-      my $rev_ftr_sqstring_alt = reverse($ftr_sqstring_alt);
-      $rev_ftr_sqstring_alt =~ m/[^Nn]/g; 
-      $pos_retval = pos($rev_ftr_sqstring_alt); # returns position of first non-N/n in reversed string
-      # if $pos_retval is undef entire sqstring is N or n
-      $ftr_3nlen      = (defined $pos_retval) ? $pos_retval - 1 : $ftr_len;
-      $ftr_stop_non_n = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_len - $ftr_3nlen), $FH_HR) : -1;
       if($ftr_3nlen != 0) { 
         my $ambg_alt = ($ftr_is_cds) ? "ambgnt3c" : "ambgnt3f";
-        my $ftr_first_n = vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ((defined $pos_retval) ? ($ftr_len - $ftr_3nlen + 1) : 1), $FH_HR);
+        my $ftr_first_n = vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, (($ftr_3nlen != -1) ? ($ftr_len - $ftr_3nlen + 1) : 1), $FH_HR);
         $alt_scoords  = "seq:" . vdr_CoordsSegmentCreate($ftr_first_n, $ftr_stop, $ftr_strand, $FH_HR) . ";";
         $alt_mcoords  = "mdl:" . vdr_CoordsSegmentCreate(abs($ua2rf_AR->[$ftr_first_n]), abs($ua2rf_AR->[$ftr_stop]), $ftr_strand, $FH_HR) . ";";
         $alt_str_H{$ambg_alt} = sprintf("%s%sVADRNULL", $alt_scoords, $alt_mcoords);
       }
-
-      # same drill for ftr_sqstring_pv
-      my $rev_ftr_sqstring_pv = reverse($ftr_sqstring_pv);
-      $rev_ftr_sqstring_pv =~ m/[^Nn]/g; 
-      $pos_retval = pos($rev_ftr_sqstring_pv); # returns position of first non-N/n in reversed string
-      # if $pos_retval is undef entire sqstring is N or n
-      $ftr_3nlen_pv      = (defined $pos_retval) ? $pos_retval - 1 : $ftr_len;
-      $ftr_stop_non_n_pv = (defined $pos_retval) ? vdr_CoordsRelativeSingleCoordToAbsolute($ftr_scoords, ($ftr_len - $ftr_3nlen_pv), $FH_HR) : -1;
 
       # if CDS, determine if translated CDS begins/ends with an X after/before terminal stretch of Ns
       if($ftr_is_cds) { 
@@ -12899,7 +12882,6 @@ sub helper_tabular_fill_header_and_justification_arrays {
   return;
 }
 
-
 #################################################################
 # Subroutine: esl_translate_cds_to_protein_with_stops()
 # Incept:     EPN, Tue Jul 27 20:43:59 2021
@@ -13047,4 +13029,39 @@ sub esl_translate_cds_to_protein_with_stops {
   printf("AA seq1:\n$aa_sqstring\n");
 
   return $aa_sqstring;
+}
+
+#################################################################
+# Subroutine: count_terminal_Ns_or_Xs_in_sqstring
+# Incept:     EPN, Thu Jul 29 07:41:13 2021
+# Purpose:    Count the number of terminal Ns or Xs at the beginning 
+#             of a sqstring and return it.
+#
+# Arguments:
+#  $sqstring:       sqstring to count Ns or Xs in
+#  $do_X:           count Xs not Ns (default count Ns)
+#             
+# Returns:  number of Ns or Xs at beginning of $sqstring
+#
+#################################################################
+sub count_terminal_Ns_or_Xs_in_sqstring {
+  my $sub_name = "count_terminal_Ns_or_Xs_in_sqstring";
+  my $nargs_exp = 2;
+  if(scalar(@_) != $nargs_exp) { die "ERROR $sub_name entered with wrong number of input args"; }
+
+  my ($sqstring, $do_X) = (@_);
+
+  printf("in $sub_name, sqstring: $sqstring\n");
+
+  my $pos_retval = undef;
+  if($do_X) { 
+    $sqstring =~ m/[^Xx]/g; 
+  }
+  else { 
+    $sqstring =~ m/[^Nn]/g; 
+  }
+  $pos_retval = pos($sqstring); # returns position of first non-N/n or non-X/x
+  # if $pos_retval is undef entire sqstring is N/n or X/x
+
+  return (defined $pos_retval) ? $pos_retval - 1 : length($sqstring);
 }
